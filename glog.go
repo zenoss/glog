@@ -667,15 +667,28 @@ func (l *loggingT) output(s severity, buf *buffer) {
 			fmt.Fprintln(os.Stderr, "Logstash buffer is full.")
 		}
 	}
+	red := []byte("\033[31m\033[1m" + string(data) + "\033[0m")
 	if l.toStderr {
-		os.Stderr.Write(data)
+		if (s == fatalLog || s == errorLog) {
+			os.Stderr.Write(red)
+		} else {
+			os.Stderr.Write(data)
+		}
 	} else {
 		if l.alsoToStderr || s >= l.stderrThreshold.get() {
-			os.Stderr.Write(data)
+			if (s == fatalLog || s == errorLog) {
+				os.Stderr.Write(red)
+			} else {
+				os.Stderr.Write(data)
+			}
 		}
 		if l.file[s] == nil {
 			if err := l.createFiles(s); err != nil {
-				os.Stderr.Write(data) // Make sure the message appears somewhere.
+				if (s == fatalLog || s == errorLog) {
+					os.Stderr.Write(red)
+				} else {
+					os.Stderr.Write(data)
+				}
 				l.exit(err)
 			}
 		}
