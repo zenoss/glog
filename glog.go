@@ -719,8 +719,24 @@ func (l *loggingT) output(s severity, buf *buffer) {
 	data := buf.Bytes()
 	if l.logstashType != "" {
 		l.logstashOnce.Do(l.startLogstash)
+		msg := logstashMessage{
+			Type: l.logstashType,
+			Message: string(data),
+			Loglevel: severity,
+			Timespamp: time.Now(),
+		}
+                switch s {
+                case fatalLog:
+			msg.Loglevel = "FATAL"
+                case errorLog:
+			msg.Loglevel = "ERROR"
+                case warningLog:
+			msg.Loglevel = "WARNING"
+                case infoLog:
+			msg.Loglevel = "INFO"
+                }
 		select {
-		case l.logstashChan <- string(data):
+		case l.logstashChan <- msg:
 		default:
 			fmt.Fprintln(os.Stderr, "Logstash buffer is full.")
 		}
@@ -782,6 +798,9 @@ func (l *loggingT) output(s severity, buf *buffer) {
 		}
 		l.mu.Unlock()
 		timeoutFlush(10 * time.Second)
+		if l.logstashType != "" {
+			l.StopLogstash(true)
+		}
 		os.Exit(255) // C++ uses -1, which is silly because it's anded with 255 anyway.
 	}
 	l.putBuffer(buf)

@@ -10,31 +10,41 @@ import (
 )
 
 type logstashMessage struct {
-	Type    string `json:"type"`
-	Message string `json:"message"`
+	Type      string    `json:"type"`
+	Message   string    `json:"message"`
+	Loglevel  string    `json:"loglevel"`
+	Timestamp time.Time `json:"@timestamp"`
 }
+
+var GlogDialer = net.Dial
 
 // handleLogstashMessages sends logs to logstash.
 func (l *loggingT) handleLogstashMessages() {
 	var conn net.Conn
-	ticker := time.Tick(1 * time.Second)
+	dialer := time.Tick(1 * time.Second)
+	var datachan chan string
+	var sysexit bool
 	for {
 		select {
-		case _ = <-l.logstashStop:
-			conn.Close()
-			return
-		case _ = <-ticker:
+		case sysexit = <-l.logstashStop:
+			close(l.logstashChan)
+		case _ = <-dialer:
 			var err error
-			if conn == nil {
-				fmt.Fprintln(os.Stderr, "Trying to connect to logstash server...")
-				conn, err = net.Dial("tcp", l.logstashURL)
-				if err != nil {
-					conn = nil
-				} else {
-					fmt.Fprintln(os.Stderr, "Connected to logstash server.")
-				}
+			fmt.Fprintln(os.Stderr, "Trying to connect to logstash server...")
+			if conn, err = GlogDialer("tcp", l.logstashURL); err != nil {
+				conn = nil
+			} else {
+				dialer = nil
+				datachan = l.logstashChan
+				fmt.Fprintln(os.Stderr, "Connected to logstash server.")
 			}
-		case data := <-l.logstashChan:
+		case data, ok := <-datachan:
+			if !ok {
+				if sysexit {
+					os.Exit(255)
+				}
+				return
+			}
 			lm := logstashMessage{}
 			lm.Type = l.logstashType
 			lm.Message = strings.TrimSpace(data)
@@ -43,17 +53,11 @@ func (l *loggingT) handleLogstashMessages() {
 				fmt.Fprintln(os.Stderr, "Failed to marshal logstashMessage.")
 				continue
 			}
-			if conn != nil {
-				_, err := fmt.Fprintln(conn, string(packet))
-				if err != nil {
-					fmt.Fprintln(os.Stderr, "Not connected to logstash server, attempting reconnect.")
-					conn = nil
-					continue
-				}
-			} else {
-				// There is no connection, so the log line is dropped.
-				// Might be nice to add a buffer here so that we can ship
-				// logs after the connection is up.
+			if _, err := fmt.Fprintln(conn, string(packet)); err != nil {
+				fmt.Fprintln(os.Stderr, "Not connected to logstash server, attempting reconnect.")
+				conn = nil
+				dialer = time.Tick(1 * time.Second)
+				continue
 			}
 		}
 	}
@@ -66,6 +70,10 @@ func (l *loggingT) startLogstash() {
 }
 
 // StopLogstash signals handleLogstashMessages to exit.
-func (l *loggingT) StopLogstash() {
-	l.logstashStop <- true
+func (l *loggingT) StopLogstash(sysexit bool) {
+	l.logstashStop <- sysexit
+	if sysexit {
+		// wait for loop to exit, if not caller will os.Exit
+		time.Sleep(time.Second * 10)
+	}
 }
