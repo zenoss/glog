@@ -63,6 +63,7 @@ func (l *loggingT) handleLogstashMessages() {
 			conn, err = net.DialTimeout("tcp", l.logstashURL, 1*time.Second)
 			if err != nil {
 				conn = nil
+				fmt.Fprintf(os.Stderr, "%s: Could not connect to logstash; will retry later\n",  msgPrefix())
 			}
 		}
 	}
