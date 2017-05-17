@@ -39,11 +39,9 @@ func (l *loggingT) handleLogstashMessages() {
 				_, err := fmt.Fprintln(conn, string(packet))
 				if err != nil {
 					conn = nil
-					//fmt.Fprintf(os.Stderr, "%s: Failed to write to logstash server; err=%s\n", msgPrefix(), err)
 				} else {
 					// reset the delay once we were able to write something to logstash
 					delay = initialDelay
-					// fmt.Fprintf(os.Stderr, "%s: write logstashMessage complete.\n",  msgPrefix())
 				}
 			} else {
 				// There is no connection, so the log line is dropped.
@@ -59,15 +57,12 @@ func (l *loggingT) handleLogstashMessages() {
 			if delay > maxDelay {
 				delay = maxDelay
 			}
-			// fmt.Fprintf(os.Stderr, "%s: no connection; sleeping %2.2f\n",  msgPrefix(), delay.Seconds())
 			time.Sleep(delay)
 
-			// fmt.Fprintf(os.Stderr, "%s: Trying to connect to logstash server %s\n", msgPrefix(), l.logstashURL)
 			var err error
 			conn, err = net.DialTimeout("tcp", l.logstashURL, 1*time.Second)
 			if err != nil {
 				conn = nil
-				//fmt.Fprintf(os.Stderr, "%s: Failed to connect to logstash server; err=%s\n", msgPrefix(), err)
 			}
 		}
 	}
